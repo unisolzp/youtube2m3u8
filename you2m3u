@@ -1,0 +1,47 @@
+CHANNELS=( "96|93|OZg6iXMnUBo|pershiy|ПЕРШИЙ_НЕЗАЛЕЖНИЙ" "96|93|ErX-LbZW-zE|nash|НАШ" )
+
+for CHANNEL in ${CHANNELS[@]}
+do
+    ID_HD=$(echo $CHANNEL | cut -d "|" -f1)
+    ID_SD=$(echo $CHANNEL | cut -d "|" -f2)
+    URL=$(echo $CHANNEL | cut -d "|" -f3)
+    LOCATION=$(echo $CHANNEL | cut -d "|" -f4)
+    FILENAME=$(echo $CHANNEL | cut -d "|" -f4)
+    MANIFEST=$(/data/data/com.termux/files/usr/bin/curl https://www.youtube.com/watch?v=$URL | grep -o "hlsManifestUrl\":\"https://manifest.googlevideo.com/api/manifest/hls_variant/expire/[-0-9A-Za-z%&#,._/]*" | cut -d "\"" -f3-)
+    /data/data/com.termux/files/usr/bin/curl $MANIFEST -o ./$FILENAME
+    MANIFEST_HD=$(cat ./$FILENAME | grep "/$ID_HD/" | /data/data/com.termux/files/usr/bin/rev | cut -d "/" -f2- | /data/data/com.termux/files/usr/bin/rev)
+    MANIFEST_SD=$(cat ./$FILENAME | grep "/$ID_SD/" | /data/data/com.termux/files/usr/bin/rev | cut -d "/" -f2- | /data/data/com.termux/files/usr/bin/rev)
+    echo "location /"$LOCATION"_hd/ {" > /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.hd.conf
+    echo "proxy_pass "$MANIFEST_HD"/;" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.hd.conf
+    echo "proxy_redirect "$MANIFEST_HD"/ /;" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.hd.conf
+    echo "proxy_set_header Host manifest.googlevideo.com;" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.hd.conf
+    echo "}" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.hd.conf
+    echo "location /"$LOCATION"_sd/ {" > /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.sd.conf
+    echo "proxy_pass "$MANIFEST_SD"/;" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.sd.conf
+    echo "proxy_redirect "$MANIFEST_SD"/ /;" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.sd.conf
+    echo "proxy_set_header Host manifest.googlevideo.com;" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.sd.conf
+    echo "}" >> /data/data/com.termux/files/usr/etc/nginx/channels/$FILENAME.sd.conf
+    sleep 1s
+done
+
+CONIGS=$(ls /data/data/com.termux/files/usr/etc/nginx/channels/*.conf)
+for CONF in ${CONFIGS[@]}
+do
+    if ! cat $CONF | grep "^proxy_pass" | grep -q "manifest.googlevideo.com"
+    then
+        mv $CONF $CONF.disabled
+    fi
+done
+
+echo "#EXTM3U" > /data/data/com.termux/files/usr/share/nginx/html/you2m3u.m3u8
+for CHANNEL in ${CHANNELS[@]}
+do
+    CHANNEL_NAME=$(echo $CHANNEL | cut -d "|" -f5 | sed -e s'/_/ /'g)
+    CHANNEL_LOCATION=$(echo $CHANNEL | cut -d "|" -f4)
+    echo "#EXTINF:-1, $CHANNEL_NAME HD" >> /data/data/com.termux/files/usr/share/nginx/html/you2m3u.m3u8
+    echo "#EXTGRP: YOUTUBE" >> /data/data/com.termux/files/usr/share/nginx/html/you2m3u.m3u8
+    echo "http://localhost:8080/"$CHANNEL_LOCATION"_hd/index.m3u8" >> /data/data/com.termux/files/usr/share/nginx/html/you2m3u.m3u8
+    echo "#EXTINF:-1, $CHANNEL_NAME SD" >> /data/data/com.termux/files/usr/share/nginx/html/you2m3u.m3u8
+    echo "#EXTGRP: YOUTUBE" >> /data/data/com.termux/files/usr/share/nginx/html/you2m3u.m3u8
+    echo "http://localhost:8080/"$CHANNEL_LOCATION"_sd/index.m3u8" >> /data/data/com.termux/files/usr/share/nginx/html/you2m3u.m3u8
+done
